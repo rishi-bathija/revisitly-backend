@@ -16,6 +16,8 @@ const verifyToken = async (req, res, next) => {
         }
 
         const token = authHeader.split('Bearer ')[1];
+        // console.log('token', token);
+
 
         // console.log('token', token);
 
@@ -46,9 +48,15 @@ const verifyToken = async (req, res, next) => {
         try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             // console.log('decoded', decoded);
-
-            req.user = decoded;
-            req.userId = decoded.id
+            const user = await User.findById( decoded.id );
+            if (!user) {
+                return res.status(401).json({
+                    success: false,
+                    message: "User not found",
+                })
+            }
+            req.user = user;
+            req.userId = user.id
             return next();
         } catch (jwtError) {
             console.log('jwtError', jwtError);

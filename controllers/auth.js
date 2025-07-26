@@ -6,9 +6,10 @@ import admin from "../firebase.js"
 dotenv.config();
 
 export const signupController = async (req, res) => {
-    const { email, password } = req.body;
+    const { name, email, password } = req.body;
+    console.log(name, email, password);
 
-    if (!email || !password) {
+    if (!name || !email || !password) {
         return res.status(400).json({
             success: false,
             message: "All fields are required",
@@ -28,6 +29,7 @@ export const signupController = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = await User.create({
+            name,
             email,
             password: hashedPassword
         })
@@ -58,12 +60,21 @@ export const loginController = async (req, res) => {
 
     try {
         const user = await User.findOne({ email })
+        // console.log('user', user);
+
 
         if (!user) {
             return res.status(401).json({
                 success: false,
                 message: "User is not registered, please signup first",
             })
+        }
+
+        if (!user.password) {
+            return res.status(401).json({
+                success: false,
+                message: "This account was created with Google. Please log in with Google",
+            });
         }
 
         if (await bcrypt.compare(password, user.password)) {
@@ -74,7 +85,9 @@ export const loginController = async (req, res) => {
             return res.status(200).json({
                 success: true,
                 message: "Logged in successfully",
-                token
+                token,
+                name: user.name,
+                email: user.email
             })
         } else {
             return res.status(401).json({
@@ -94,7 +107,7 @@ export const loginController = async (req, res) => {
 
 export const socialLoginController = async (req, res) => {
     try {
-        console.log('req.body:', req.body);
+        // console.log('req.body:', req.body);
         const { idToken } = req.body;
 
         if (!idToken) {
@@ -107,10 +120,17 @@ export const socialLoginController = async (req, res) => {
         let user = await User.findOne({ firebaseUID: uid });
 
         if (!user) {
-            user = await User.create({
-                firebaseUID: uid,
-                email
-            })
+            user = await User.findOne({ email });
+            if (user) {
+                user.firebaseUID = uid,
+                    await user.save();
+            }
+            else {
+                user = await User.create({
+                    firebaseUID: uid,
+                    email
+                })
+            }
         }
 
         return res.status(200).json({
