@@ -48,7 +48,9 @@ const verifyToken = async (req, res, next) => {
         try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             // console.log('decoded', decoded);
-            const user = await User.findById( decoded.id );
+            const user = await User.findById(decoded.id);
+            console.log('user', user);
+
             if (!user) {
                 return res.status(401).json({
                     success: false,
@@ -56,7 +58,7 @@ const verifyToken = async (req, res, next) => {
                 })
             }
             req.user = user;
-            req.userId = user.id
+            req.userId = user._id
             return next();
         } catch (jwtError) {
             console.log('jwtError', jwtError);
