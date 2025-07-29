@@ -34,6 +34,36 @@ export const addBookmarkController = async (req, res) => {
     }
 }
 
+export const updateBookmarkController = async (req, res) => {
+    const { remindAt } = req.body;
+    const { id } = req.params;
+
+    try {
+        const updatedBookmark = await Bookmark.findOneAndUpdate(
+            { _id: id, user: req.userId },
+            {
+                $set: {
+                    remindAt: remindAt ? new Date(remindAt) : null,
+                    reminded: false
+                }
+            },
+            { new: true }
+        )
+
+        return res.status(200).json({
+            success: true,
+            message: "Bookmark updated successully!",
+            updatedBookmark
+        });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Can't update bookmark",
+        });
+    }
+}
+
 export const getBookmarkController = async (req, res) => {
     try {
         const bookmarks = await Bookmark.find({ user: req.userId }).sort({ createdAt: -1 });
