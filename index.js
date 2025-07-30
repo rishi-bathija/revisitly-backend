@@ -3,7 +3,8 @@ import dotenv from 'dotenv'
 import dbConnect from './db.js';
 import authRoutes from './routes/auth.js'
 import bookmarkRoutes from './routes/bookmarks.js'
-import "./cron.js"
+import reminderRoutes from './routes/reminder.js'
+// import "./cron.js"
 
 import cors from "cors"
 const port = process.env.PORT || 5000;
@@ -21,7 +22,8 @@ app.use(
 )
 
 app.use("/api/auth", authRoutes);
-app.use("/api/bookmarks", bookmarkRoutes)
+app.use("/api/bookmarks", bookmarkRoutes);
+app.use("/api/reminders", reminderRoutes);
 
 app.get('/', (req, res) => {
     res.send('hello')
