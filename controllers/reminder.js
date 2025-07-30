@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer"
 import dotenv from "dotenv"
-import Bookmark from "./models/Bookmark.js";
+import Bookmark from "../models/Bookmark.js";
 
 dotenv.config();
 
