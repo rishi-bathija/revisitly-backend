@@ -35,24 +35,30 @@ export const addBookmarkController = async (req, res) => {
 }
 
 export const updateBookmarkController = async (req, res) => {
-    const { remindAt } = req.body;
+    const bookmarkData = req.body;
     const { id } = req.params;
 
     try {
+        // Create update object based on what's provided
+        const updateFields = {};
+
+        if (bookmarkData.url) updateFields.url = bookmarkData.url;
+        if (bookmarkData.title !== undefined) updateFields.title = bookmarkData.title;
+        if (bookmarkData.tag !== undefined) updateFields.tag = bookmarkData.tag;
+        if (bookmarkData.remindAt !== undefined) {
+            updateFields.remindAt = bookmarkData.remindAt ? new Date(bookmarkData.remindAt) : null;
+            updateFields.reminded = false; // Reset reminded status when updating reminder
+        }
+
         const updatedBookmark = await Bookmark.findOneAndUpdate(
             { _id: id, user: req.userId },
-            {
-                $set: {
-                    remindAt: remindAt ? new Date(remindAt) : null,
-                    reminded: false
-                }
-            },
+            { $set: updateFields },
             { new: true }
-        )
+        );
 
         return res.status(200).json({
             success: true,
-            message: "Bookmark updated successully!",
+            message: "Bookmark updated successfully!",
             updatedBookmark
         });
     } catch (error) {
@@ -62,7 +68,7 @@ export const updateBookmarkController = async (req, res) => {
             message: "Can't update bookmark",
         });
     }
-}
+};
 
 export const getBookmarkController = async (req, res) => {
     try {
