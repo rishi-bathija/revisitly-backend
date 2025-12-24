@@ -65,7 +65,7 @@ export const processReminderController = async (req, res) => {
       try {
         await sendEmail({
           to: user.email,
-          subject: `⏰ Reminder v3 – ${new Date().toISOString()}`,
+          subject: `⏰ Reminder: Check your bookmark!`,
           html: `
             <div style="font-family: Arial, sans-serif; background:#f9fafb; padding:20px; border-radius:10px; max-width:600px; margin:auto;">
               <h2 style="color:#111827;">🔖 Reminder for your bookmark</h2>

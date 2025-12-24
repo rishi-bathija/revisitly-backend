@@ -109,3 +109,28 @@ export const deleteBookmarkController = async (req, res) => {
         })
     }
 }
+
+
+export const getSingleBookmarkController = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const bookmark = await Bookmark.findOne({ _id: id, user: req.userId });
+        if (!bookmark) {
+            return res.status(404).json({
+                success: false,
+                message: "Bookmark not found",
+            });
+        }
+        return res.status(200).json({
+            success: true,
+            message: "Bookmark fetched successfully",
+            bookmark
+        });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch bookmark",
+        });
+    }
+}
