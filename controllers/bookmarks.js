@@ -1,5 +1,8 @@
 import Bookmark from "../models/Bookmark.js";
+import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
 
+dotenv.config();
 
 export const addBookmarkController = async (req, res) => {
     const { url, title, tag, remindAt } = req.body;
@@ -56,6 +59,13 @@ export const updateBookmarkController = async (req, res) => {
             { new: true }
         );
 
+        if (!updatedBookmark) {
+            return res.status(404).json({
+                success: false,
+                message: "Bookmark not found",
+            });
+        }
+
         return res.status(200).json({
             success: true,
             message: "Bookmark updated successfully!",
@@ -66,6 +76,73 @@ export const updateBookmarkController = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Can't update bookmark",
+        });
+    }
+};
+
+export const emailReminderController = async (req, res) => {
+    try {
+        const { token, remindAt } = req.body;
+
+        if (!token || !remindAt) {
+            return res.status(400).json({ success: false, message: "Missing token or remindAt" });
+        }
+
+        const secret = process.env.REMINDER_TOKEN_SECRET;
+        const payload = jwt.verify(token, secret);
+
+        if (payload.action !== "REMIND") {
+            return res.status(403).json({ success: false, message: "Invalid token action" });
+        }
+
+        // Ensure the bookmark exists and belongs to payload.userId
+        const updated = await Bookmark.findOneAndUpdate(
+            { _id: payload.bookmarkId, user: payload.userId },
+            { remindAt: new Date(remindAt), reminded: false },
+            { new: true }
+        );
+
+        if (!updated) {
+            return res.status(404).json({ success: false, message: "Bookmark not found" });
+        }
+
+        return res.json({ success: true, updatedBookmark: updated });
+    } catch (err) {
+        return res.status(403).json({
+            success: false,
+            message: "Invalid or expired reminder link",
+        });
+    }
+};
+
+export const verifyReminderTokenController = async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) {
+            return res.status(400).json({ success: false, message: "Token required" });
+        }
+
+        const payload = jwt.verify(token, process.env.REMINDER_TOKEN_SECRET);
+        if (payload.action !== "REMIND") {
+            return res.status(403).json({ success: false, message: "Invalid token action" });
+        }
+
+        const bookmark = await Bookmark.findById(payload.bookmarkId).populate("user", "email");
+        if (!bookmark) {
+            return res.status(404).json({ success: false, message: "Bookmark not found" });
+        }
+
+        const ownerEmail = bookmark.user?.email || null;
+        return res.json({
+            success: true,
+            bookmarkId: payload.bookmarkId,
+            ownerId: payload.userId,
+            ownerEmail
+        });
+    } catch (err) {
+        return res.status(403).json({
+            success: false,
+            message: "Invalid or expired token",
         });
     }
 };
@@ -118,7 +195,7 @@ export const getSingleBookmarkController = async (req, res) => {
         if (!bookmark) {
             return res.status(404).json({
                 success: false,
-                message: "Bookmark not found",
+                message: "Bookmark not found or you don't have access to it",
             });
         }
         return res.status(200).json({
@@ -127,7 +204,7 @@ export const getSingleBookmarkController = async (req, res) => {
             bookmark
         });
     } catch (error) {
-        console.log(error);
+        console.log("Error fetching bookmark:", error);
         return res.status(500).json({
             success: false,
             message: "Failed to fetch bookmark",
