@@ -6,8 +6,11 @@ dotenv.config();
 
 // Email template matching the Revisitly design
 // Email template matching the Revisitly design - Mobile Responsive
-const cloudName = process.env.CLOUDINARY_CLOUD_NAME
-const emailTemplate = (user, bookmark, bookmarkUrl, remindAgainLink, frontendUrl) => `
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const TESTING_MODE = process.env.TESTING_MODE === 'true';
+console.log('testing mode', TESTING_MODE);
+
+const emailTemplate = (user, bookmark, bookmarkUrl, remindAgainLink, frontendUrl, isFollowUp = false) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -59,6 +62,7 @@ const emailTemplate = (user, bookmark, bookmarkUrl, remindAgainLink, frontendUrl
   <![endif]-->
 </head>
 <body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  ${TESTING_MODE ? '<div style="background: #ffeb3b; padding: 10px; text-align: center; font-weight: bold; color: #000;">🧪 TESTING MODE - 1 minute = 1 day</div>' : ''}
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f5f5f5;">
     <tr>
       <td style="padding: 20px 8px;">
@@ -85,8 +89,8 @@ const emailTemplate = (user, bookmark, bookmarkUrl, remindAgainLink, frontendUrl
                 </tr>
                 <tr>
                   <td style="text-align: left;">
-                    <span style="display: inline-block; padding: 6px 12px; background-color: #e8f5e9; color: #2e7d32; font-size: 11px; font-weight: 500; border-radius: 4px;">
-                      Reminder email
+                    <span style="display: inline-block; padding: 6px 12px; background-color: ${isFollowUp ? '#fee2e2' : '#e8f5e9'}; color: ${isFollowUp ? '#b91c1c' : '#2e7d32'}; font-size: 11px; font-weight: 500; border-radius: 4px;">
+                      ${isFollowUp ? '🔔 Follow-up Reminder' : '⏰ Reminder email'}
                     </span>
                   </td>
                 </tr>
@@ -100,16 +104,18 @@ const emailTemplate = (user, bookmark, bookmarkUrl, remindAgainLink, frontendUrl
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                 <tr>
                   <td style="width: 36px; vertical-align: top; padding-top: 4px;">
-                    <div style="width: 32px; height: 32px; background-color: #FEF3C7; border-radius: 50%; text-align: center; line-height: 32px;">
+                    <div style="width: 32px; height: 32px; background-color: ${isFollowUp ? '#FEE2E2' : '#FEF3C7'}; border-radius: 50%; text-align: center; line-height: 32px;">
                       <img src="https://res.cloudinary.com/${cloudName}/image/upload/v1766914205/lucide_pin_tuik6j.png" alt="Bookmark" width="18" height="18" style="display: inline-block; vertical-align: middle; border: 0;">
                     </div>
                   </td>
                   <td style="padding-left: 12px; vertical-align: top;">
                     <h1 class="mobile-heading" style="margin: 0; font-size: 20px; font-weight: 600; color: #1a1a1a; line-height: 28px;">
-                      Reminder for your bookmark
+                      ${isFollowUp ? "You haven't opened this yet" : 'Reminder for your bookmark'}
                     </h1>
                     <p style="margin: 4px 0 0; font-size: 13px; color: #666666; line-height: 18px;">
-                      It's time to revisit a link you saved in Revisitly.
+                      ${isFollowUp
+    ? "This is a follow-up reminder for a link you saved."
+    : "It's time to revisit a link you saved in Revisitly."}
                     </p>
                   </td>
                 </tr>
@@ -124,7 +130,9 @@ const emailTemplate = (user, bookmark, bookmarkUrl, remindAgainLink, frontendUrl
                 Hey ${user.name || 'there'},
               </p>
               <p class="mobile-text" style="margin: 0 0 20px; font-size: 15px; line-height: 22px; color: #4d4d4d;">
-                You saved this bookmark and set a reminder to come back to it. Here's a quick snapshot to it.
+                ${isFollowUp
+    ? "You haven't opened this bookmark yet. Here's a reminder:"
+    : 'You saved this bookmark and set a reminder to come back to it. Here\'s a quick snapshot to it.'}
               </p>
               
               <!-- Saved Bookmark heading -->
@@ -133,7 +141,7 @@ const emailTemplate = (user, bookmark, bookmarkUrl, remindAgainLink, frontendUrl
               </div>
 
               <!-- Bookmark Card -->
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 16px; background-color: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 16px; background-color: #f8f9fa; border: ${isFollowUp ? '2px solid #fca5a5' : '1px solid #e0e0e0'}; border-radius: 8px;">
                 <tr>
                   <td style="padding: 16px;">
                     <h2 style="margin: 0 0 8px; font-size: 15px; font-weight: 600; color: #1a1a1a; line-height: 22px;">
@@ -161,6 +169,18 @@ const emailTemplate = (user, bookmark, bookmarkUrl, remindAgainLink, frontendUrl
                 </tr>
               </table>
               
+              ${isFollowUp ? `
+              <!-- Follow-up Notice -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 20px; background-color: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px;">
+                <tr>
+                  <td style="padding: 12px;">
+                    <p style="margin: 0; font-size: 13px; color: #991b1b; line-height: 18px;">
+                      <strong>⏰ Reminder:</strong> You set this bookmark ${bookmark.smartFollowUp.daysDelay} ${bookmark.smartFollowUp.daysDelay === 1 ? 'day' : 'days'} ago but haven't opened it yet. Don't let it slip away!
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              ` : `
               <!-- Reminder Metadata -->
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 20px;">
                 <tr>
@@ -174,14 +194,15 @@ const emailTemplate = (user, bookmark, bookmarkUrl, remindAgainLink, frontendUrl
                   </td>
                 </tr>
               </table>
+              `}
               
               <!-- CTA Buttons -->
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                 <tr>
                   <td style="padding-bottom: 10px;">
-                    <a href="${bookmarkUrl}" style="display: block; width: 100%; padding: 13px 20px; background-color: #2563eb; color: #ffffff; text-decoration: none; text-align: center; font-size: 14px; font-weight: 600; border-radius: 6px; box-sizing: border-box;">
+                    <a href="${bookmarkUrl}" style="display: block; width: 100%; padding: 13px 20px; background-color: ${isFollowUp ? '#dc2626' : '#2563eb'}; color: #ffffff; text-decoration: none; text-align: center; font-size: 14px; font-weight: 600; border-radius: 6px; box-sizing: border-box;">
                       <img src="https://res.cloudinary.com/${cloudName}/image/upload/v1766915956/lucide_link_ova1oz.png" alt="" width="16" height="16" style="display: inline-block; vertical-align: middle; margin-right: 6px; margin-top: -2px; border: 0;">
-                      <span style="vertical-align: middle;">Visit bookmark</span>
+                      <span style="vertical-align: middle;">${isFollowUp ? 'Open Now' : 'Visit bookmark'}</span>
                     </a>
                   </td>
                 </tr>
@@ -231,9 +252,21 @@ export const processReminderController = async (req, res) => {
   try {
     const now = new Date();
 
+    // Find 2 type of reminders:
+    // 1. Regular reminders that are due
+    // 2. Smart follow-ups that are due
     const bookmarksToRemind = await Bookmark.find({
-      remindAt: { $lte: now },
-      reminded: false
+      $or: [
+        {
+          remindAt: { $lte: now },
+          reminded: false,
+        },
+        {
+          "smartFollowUp.enabled": true,
+          "smartFollowUp.followUpScheduled": { $lte: now },
+          "smartFollowUp.followUpSent": false,
+        }
+      ]
     }).populate("user");
 
     console.log(`Found ${bookmarksToRemind.length} bookmarks to remind`);
@@ -245,8 +278,8 @@ export const processReminderController = async (req, res) => {
 
     for (const bookmark of bookmarksToRemind) {
       const user = bookmark.user;
-      console.log('user', user);
-      console.log('bookmark', bookmark);
+      // console.log('user', user);
+      // console.log('bookmark', bookmark);
 
       // await transporter.sendMail({
       //   from: process.env.MAIL_USER,
@@ -283,6 +316,12 @@ export const processReminderController = async (req, res) => {
       // });
 
       try {
+        const isFollowUp = bookmark.smartFollowUp.followUpScheduled &&
+          bookmark.smartFollowUp.followUpScheduled <= now &&
+          !bookmark.smartFollowUp.followUpSent;
+
+        console.log('isfollowup', isFollowUp);
+
         // Generate a signed token for this specific bookmark's reminder link
         const reminderToken = jwt.sign(
           {
@@ -295,16 +334,46 @@ export const processReminderController = async (req, res) => {
         );
 
         const remindAgainLink = `${frontendUrl}/remind/${reminderToken}`;
+        const trackingLink = `${frontendUrl}/track/${bookmark._id}?redirect=${encodeURIComponent(bookmark.url)}`;
+
+        const subject = isFollowUp
+          ? `🔔 Follow-up: You haven't opened this bookmark yet`
+          : `⏰ Reminder: Check your bookmark!`;
 
         await sendEmail({
           to: user.email,
-          subject: `⏰ Reminder: Check your bookmark!`,
-          html: emailTemplate(user, bookmark, bookmark.url, remindAgainLink, frontendUrl),
+          subject,
+          html: emailTemplate(user, bookmark, trackingLink, remindAgainLink, frontendUrl, isFollowUp),
         });
 
-        bookmark.reminded = true;
-        await bookmark.save();
+        // add to reminder history
+        bookmark.reminderHistory.push({
+          sentAt: new Date(),
+          opened: false,
+          isFollowUp: isFollowUp
+        });
 
+        if (isFollowUp) {
+          bookmark.smartFollowUp.followUpSent = true;
+          bookmark.smartFollowUp.followUpScheduled = null;  // Reset for next cycle
+          console.log(`🔔 Follow-up sent for bookmark ${bookmark._id}`);
+        }
+        else {
+          bookmark.reminded = true;
+          // Only schedule follow-up if not already scheduled
+          if (bookmark.smartFollowUp.enabled && !bookmark.smartFollowUp.followUpScheduled) {
+            // Schedule next follow-up
+            const nextFollowUpDate = new Date();
+            const delayMinutes = TESTING_MODE ? bookmark.smartFollowUp.daysDelay : bookmark.smartFollowUp.daysDelay * 1440;
+            nextFollowUpDate.setMinutes(nextFollowUpDate.getMinutes() + delayMinutes);
+            // nextFollowUpDate.setDate(nextFollowUpDate.getDate() + bookmark.smartFollowUp.daysDelay);
+            bookmark.smartFollowUp.followUpScheduled = nextFollowUpDate;
+            bookmark.smartFollowUp.followUpSent = false;
+            console.log(`Next follow-up scheduled for ${nextFollowUpDate} for bookmark ${bookmark._id}`);
+          }
+          await scheduleNextReminder(bookmark);
+        }
+        await bookmark.save();
         sentCount++;
         console.log(`📬 Reminder sent to ${user.email} for ${bookmark.url}`);
       } catch (error) {
@@ -325,5 +394,35 @@ export const processReminderController = async (req, res) => {
       success: false,
       message: "Failed to process reminders.",
     });
+  }
+}
+
+async function scheduleNextReminder(bookmark) {
+  if (bookmark.repeatType === "none") {
+    return;
+  }
+
+  const currentRemindAt = bookmark.remindAt;
+  let nextRemindAt;
+
+  if (bookmark.repeatType === "daily") {
+    nextRemindAt = new Date(currentRemindAt);
+    nextRemindAt.setMinutes(nextRemindAt.getMinutes() + (TESTING_MODE ? 1 : 1440));
+    // nextRemindAt.setDate(nextRemindAt.getDate() + (TESTING_MODE ? 1 : 1440)); 
+  }
+  else if (bookmark.repeatType === "weekly") {
+    nextRemindAt = new Date(currentRemindAt);
+    nextRemindAt.setMinutes(nextRemindAt.getMinutes() + (TESTING_MODE ? 7 : 10080));
+    // nextRemindAt.setDate(nextRemindAt.getDate() + (TESTING_MODE ? 7 : 10080));
+  }
+
+  if (nextRemindAt) {
+    console.log('bookmark.smartfollowup.followupsent', bookmark.smartFollowUp.followUpSent);
+    
+    bookmark.remindAt = nextRemindAt;
+    bookmark.reminded = false;
+    // bookmark.smartFollowUp.followUpScheduled = null;
+    // bookmark.smartFollowUp.followUpSent = false;
+    console.log(`Next reminder scheduled for ${nextRemindAt} for bookmark ${bookmark._id}`);
   }
 }

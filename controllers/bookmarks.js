@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const addBookmarkController = async (req, res) => {
-    const { url, title, tag, remindAt } = req.body;
+    const { url, title, tag, remindAt, repeatType, smartFollowUp } = req.body;
 
     if (!url) {
         return res.status(400).json({
@@ -20,7 +20,15 @@ export const addBookmarkController = async (req, res) => {
             url,
             title,
             tag,
-            remindAt: remindAt ? new Date(remindAt) : null
+            remindAt: remindAt ? new Date(remindAt) : null,
+            repeatType: repeatType || "none",
+            smartFollowUp: {
+                enabled: smartFollowUp?.enabled || false,
+                daysDelay: smartFollowUp?.daysDelay || 3,
+                lastOpened: null,
+                followUpScheduled: null,
+                followUpSent: false
+            }
         })
 
         return res.status(200).json({
@@ -53,6 +61,17 @@ export const updateBookmarkController = async (req, res) => {
             updateFields.reminded = false; // Reset reminded status when updating reminder
         }
 
+        if (bookmarkData.repeatType !== undefined) updateFields.repeatType = bookmarkData.repeatType;
+
+        if (bookmarkData.smartFollowUp !== undefined) {
+            if (bookmarkData.smartFollowUp.enabled !== undefined) {
+                updateFields['smartFollowUp.enabled'] = bookmarkData.smartFollowUp.enabled;
+            }
+            if (bookmarkData.smartFollowUp.daysDelay !== undefined) {
+                updateFields['smartFollowUp.daysDelay'] = bookmarkData.smartFollowUp.daysDelay;
+            }
+        }
+
         const updatedBookmark = await Bookmark.findOneAndUpdate(
             { _id: id, user: req.userId },
             { $set: updateFields },
@@ -80,6 +99,74 @@ export const updateBookmarkController = async (req, res) => {
     }
 };
 
+export const trackBookmarkOpenController = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const bookmark = await Bookmark.findOne(
+            { _id: id, user: req.userId },
+        );
+
+        if (!bookmark) {
+            return res.status(404).json({ success: false, message: "Bookmark not found" });
+        }
+
+        bookmark.smartFollowUp.lastOpened = new Date();
+
+        // cancel any pending follow-up, as user has opened the bookmark
+        if (bookmark.smartFollowUp.followUpScheduled && !bookmark.smartFollowUp.followUpSent) {
+            bookmark.smartFollowUp.followUpScheduled = null;
+            bookmark.smartFollowUp.followUpSent = true;
+            console.log(`✅ Follow-up cancelled for bookmark ${id} - user opened it`);
+        }
+
+        // Mark the last reminder as opened
+        if (bookmark.reminderHistory.length > 0) {
+            const lastReminder = bookmark.reminderHistory[bookmark.reminderHistory.length - 1];
+            lastReminder.opened = true;
+        }
+        await bookmark.save();
+        return res.status(200).json({ success: true, message: "Bookmark open tracked" });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ success: false, message: "Failed to track bookmark open" });
+    }
+};
+
+export const updateSmartReminderController = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { repeatType, smartFollowUp } = req.body;
+
+        const bookmark = await Bookmark.findOne(
+            { _id: id, user: req.userId },
+        );
+
+        if (!bookmark) {
+            return res.status(404).json({ success: false, message: "Bookmark not found" });
+        }
+
+        if (repeatType !== undefined) {
+            bookmark.repeatType = repeatType;
+        }
+
+        if (smartFollowUp !== undefined) {
+            if (smartFollowUp.enabled !== undefined) {
+                bookmark.smartFollowUp.enabled = smartFollowUp.enabled;
+            }
+            if (smartFollowUp.daysDelay !== undefined) {
+                bookmark.smartFollowUp.daysDelay = smartFollowUp.daysDelay;
+            }
+        }
+
+        await bookmark.save();
+
+        return res.status(200).json({ success: true, message: "Smart follow-up updated", bookmark });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ success: false, message: "Failed to update smart follow-up" });
+    }
+};
+
 export const emailReminderController = async (req, res) => {
     try {
         const { token, remindAt } = req.body;
@@ -98,7 +185,13 @@ export const emailReminderController = async (req, res) => {
         // Ensure the bookmark exists and belongs to payload.userId
         const updated = await Bookmark.findOneAndUpdate(
             { _id: payload.bookmarkId, user: payload.userId },
-            { remindAt: new Date(remindAt), reminded: false },
+            {
+                remindAt: new Date(remindAt),
+                reminded: false,
+                // reset follow-up when manually rescheduling
+                'smartFollowUp.followUpScheduled': null,
+                'smartFollowUp.followUpSent': false
+            },
             { new: true }
         );
 
