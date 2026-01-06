@@ -276,107 +276,64 @@ export const processReminderController = async (req, res) => {
     let sentCount = 0;
     let failedCount = 0;
 
-    for (const bookmark of bookmarksToRemind) {
+    // Separate all bookmarks into those needing regular reminders and those needing follow-ups
+    const allBookmarks = bookmarksToRemind.filter(b => !b.smartFollowUp.followUpSent);
+    const followUpsToSend = bookmarksToRemind.filter(b => b.smartFollowUp.followUpSent);
+
+    // First pass - send regular reminders
+    for (const bookmark of allBookmarks) {
       const user = bookmark.user;
-      // console.log('user', user);
-      // console.log('bookmark', bookmark);
-
-      // await transporter.sendMail({
-      //   from: process.env.MAIL_USER,
-      //   to: user.email,
-      //   subject: "⏰ Reminder: Check your bookmark!",
-      //   html: `
-      //         <div style="font-family: Arial, sans-serif; background:#f9fafb; padding:20px; border-radius:10px; max-width:600px; margin:auto;">
-      //           <h2 style="color:#111827;">🔖 Reminder for your bookmark</h2>
-      //           <p style="font-size:16px; color:#374151;">
-      //             Hey ${user.name || "there"},<br/><br/>
-      //             You saved this bookmark:
-      //           </p>
-      //           <div style="background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:15px; margin:20px 0;">
-      //             <strong>${bookmark.title || bookmark.url}</strong><br/>
-      //             <a href="${bookmark.url}" style="color:#2563eb; text-decoration:none;" target="_blank">
-      //               ${bookmark.url}
-      //             </a>
-      //           </div>
-
-      //           <p style="font-size:15px; color:#374151;">
-      //             Do you want to be reminded about this again later?
-      //           </p>
-
-      //           <a href="http://localhost:3000/add-bookmark?id=${bookmark._id}&mode=remind" 
-      //             style="display:inline-block; padding:12px 20px; background:#2563eb; color:#fff; border-radius:6px; text-decoration:none; font-weight:bold;">
-      //             🔄 Set Reminder Again
-      //           </a>
-
-      //           <p style="font-size:12px; color:#6b7280; margin-top:30px;">
-      //             Revisitly — Your Bookmark Reminder App
-      //           </p>
-      //         </div>
-      //         `
-      // });
+      const isRegularDue = bookmarksToRemind.some(r => r._id.equals(bookmark._id));
+      const isFollowUpDue = followUpsToSend.some(f => f._id.equals(bookmark._id));
 
       try {
-        const isFollowUp = bookmark.smartFollowUp.followUpScheduled &&
-          bookmark.smartFollowUp.followUpScheduled <= now &&
-          !bookmark.smartFollowUp.followUpSent;
+        // Send regular reminder if due
+        if (isRegularDue) {
+          await sendEmail({
+            to: user.email,
+            subject: `⏰ Reminder: Check your bookmark!`,
+            html: emailTemplate(user, bookmark, trackingLink, remindAgainLink, frontendUrl, false),
+          });
 
-        console.log('isfollowup', isFollowUp);
+          bookmark.reminderHistory.push({
+            sentAt: new Date(),
+            opened: false,
+            isFollowUp: false
+          });
 
-        // Generate a signed token for this specific bookmark's reminder link
-        const reminderToken = jwt.sign(
-          {
-            action: "REMIND",
-            bookmarkId: bookmark._id.toString(),
-            userId: user._id.toString()
-          },
-          process.env.REMINDER_TOKEN_SECRET,
-          { expiresIn: "24h" } // Token valid for 24 hours
-        );
-
-        const remindAgainLink = `${frontendUrl}/remind/${reminderToken}`;
-        const trackingLink = `${frontendUrl}/track/${bookmark._id}?redirect=${encodeURIComponent(bookmark.url)}`;
-
-        const subject = isFollowUp
-          ? `🔔 Follow-up: You haven't opened this bookmark yet`
-          : `⏰ Reminder: Check your bookmark!`;
-
-        await sendEmail({
-          to: user.email,
-          subject,
-          html: emailTemplate(user, bookmark, trackingLink, remindAgainLink, frontendUrl, isFollowUp),
-        });
-
-        // add to reminder history
-        bookmark.reminderHistory.push({
-          sentAt: new Date(),
-          opened: false,
-          isFollowUp: isFollowUp
-        });
-
-        if (isFollowUp) {
-          bookmark.smartFollowUp.followUpSent = true;
-          bookmark.smartFollowUp.followUpScheduled = null;  // Reset for next cycle
-          console.log(`🔔 Follow-up sent for bookmark ${bookmark._id}`);
-        }
-        else {
           bookmark.reminded = true;
-          // Only schedule follow-up if not already scheduled
           if (bookmark.smartFollowUp.enabled && !bookmark.smartFollowUp.followUpScheduled) {
-          // if (bookmark.smartFollowUp.enabled) {
-            // Schedule next follow-up
             const nextFollowUpDate = new Date();
             const delayMinutes = TESTING_MODE ? bookmark.smartFollowUp.daysDelay : bookmark.smartFollowUp.daysDelay * 1440;
             nextFollowUpDate.setMinutes(nextFollowUpDate.getMinutes() + delayMinutes);
-            // nextFollowUpDate.setDate(nextFollowUpDate.getDate() + bookmark.smartFollowUp.daysDelay);
             bookmark.smartFollowUp.followUpScheduled = nextFollowUpDate;
             bookmark.smartFollowUp.followUpSent = false;
-            console.log(`Next follow-up scheduled for ${nextFollowUpDate} for bookmark ${bookmark._id}`);
           }
           await scheduleNextReminder(bookmark);
+          sentCount++;
         }
+
+        // Send follow-up reminder if due
+        if (isFollowUpDue) {
+          await sendEmail({
+            to: user.email,
+            subject: `🔔 Follow-up: You haven't opened this bookmark yet`,
+            html: emailTemplate(user, bookmark, trackingLink, remindAgainLink, frontendUrl, true),
+          });
+
+          bookmark.reminderHistory.push({
+            sentAt: new Date(),
+            opened: false,
+            isFollowUp: true
+          });
+
+          bookmark.smartFollowUp.followUpSent = true;
+          bookmark.smartFollowUp.followUpScheduled = null;
+          sentCount++;
+        }
+
         await bookmark.save();
-        sentCount++;
-        console.log(`📬 Reminder sent to ${user.email} for ${bookmark.url}`);
+        console.log(`📬 Reminder(s) sent to ${user.email} for ${bookmark.url}`);
       } catch (error) {
         failedCount++;
         console.error(`error sending mail for bookmark ${bookmark.id}`, error.message);
@@ -419,7 +376,7 @@ async function scheduleNextReminder(bookmark) {
 
   if (nextRemindAt) {
     console.log('bookmark.smartfollowup.followupsent', bookmark.smartFollowUp.followUpSent);
-    
+
     bookmark.remindAt = nextRemindAt;
     bookmark.reminded = false;
     // bookmark.smartFollowUp.followUpScheduled = null;
