@@ -355,13 +355,14 @@ export const processReminderController = async (req, res) => {
 
         if (isFollowUp) {
           bookmark.smartFollowUp.followUpSent = true;
-          bookmark.smartFollowUp.followUpScheduled = null;  // Reset for next cycle
+          // bookmark.smartFollowUp.followUpScheduled = null;  // Reset for next cycle
           console.log(`🔔 Follow-up sent for bookmark ${bookmark._id}`);
         }
         else {
           bookmark.reminded = true;
           // Only schedule follow-up if not already scheduled
-          if (bookmark.smartFollowUp.enabled && !bookmark.smartFollowUp.followUpScheduled) {
+          // if (bookmark.smartFollowUp.enabled && !bookmark.smartFollowUp.followUpScheduled) {
+          if (bookmark.smartFollowUp.enabled) {
             // Schedule next follow-up
             const nextFollowUpDate = new Date();
             const delayMinutes = TESTING_MODE ? bookmark.smartFollowUp.daysDelay : bookmark.smartFollowUp.daysDelay * 1440;
@@ -421,8 +422,8 @@ async function scheduleNextReminder(bookmark) {
     
     bookmark.remindAt = nextRemindAt;
     bookmark.reminded = false;
-    // bookmark.smartFollowUp.followUpScheduled = null;
-    // bookmark.smartFollowUp.followUpSent = false;
+    bookmark.smartFollowUp.followUpScheduled = null;
+    bookmark.smartFollowUp.followUpSent = false;
     console.log(`Next reminder scheduled for ${nextRemindAt} for bookmark ${bookmark._id}`);
   }
 }
