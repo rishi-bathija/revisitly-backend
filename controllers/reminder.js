@@ -252,9 +252,7 @@ export const processReminderController = async (req, res) => {
   try {
     const now = new Date();
 
-    // Find 2 type of reminders:
-    // 1. Regular reminders that are due
-    // 2. Smart follow-ups that are due
+    // Find all bookmarks with either regular or follow-up reminders due
     const bookmarksToRemind = await Bookmark.find({
       $or: [
         {
@@ -270,28 +268,44 @@ export const processReminderController = async (req, res) => {
     }).populate("user");
 
     console.log(`Found ${bookmarksToRemind.length} bookmarks to remind`);
-    console.log('Bookmarks:', bookmarksToRemind);
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     let sentCount = 0;
     let failedCount = 0;
 
-    // Separate all bookmarks into those needing regular reminders and those needing follow-ups
-    const allBookmarks = bookmarksToRemind.filter(b => !b.smartFollowUp.followUpSent);
-    const followUpsToSend = bookmarksToRemind.filter(b => b.smartFollowUp.followUpSent);
-
-    // First pass - send regular reminders
-    for (const bookmark of allBookmarks) {
+    for (const bookmark of bookmarksToRemind) {
       const user = bookmark.user;
-      const isRegularDue = bookmarksToRemind.some(r => r._id.equals(bookmark._id));
-      const isFollowUpDue = followUpsToSend.some(f => f._id.equals(bookmark._id));
+
+      // Check if regular reminder is due
+      const isRegularDue = bookmark.remindAt && bookmark.remindAt <= now && !bookmark.reminded;
+
+      // Check if follow-up is due
+      const isFollowUpDue =
+        bookmark.smartFollowUp.enabled &&
+        bookmark.smartFollowUp.followUpScheduled &&
+        bookmark.smartFollowUp.followUpScheduled <= now &&
+        !bookmark.smartFollowUp.followUpSent;
+
+      // Generate signed token for reminder link
+      const reminderToken = jwt.sign(
+        {
+          action: "REMIND",
+          bookmarkId: bookmark._id.toString(),
+          userId: user._id.toString()
+        },
+        process.env.REMINDER_TOKEN_SECRET,
+        { expiresIn: "24h" }
+      );
+
+      const remindAgainLink = `${frontendUrl}/remind/${reminderToken}`;
+      const trackingLink = `${frontendUrl}/track/${bookmark._id}?redirect=${encodeURIComponent(bookmark.url)}`;
 
       try {
         // Send regular reminder if due
         if (isRegularDue) {
           await sendEmail({
             to: user.email,
-            subject: `⏰ Reminder: Check your bookmark!`,
+            subject: `⏰ Reminder: ${bookmark.title || 'Your bookmark'}`,
             html: emailTemplate(user, bookmark, trackingLink, remindAgainLink, frontendUrl, false),
           });
 
@@ -302,22 +316,28 @@ export const processReminderController = async (req, res) => {
           });
 
           bookmark.reminded = true;
+
+          // Schedule follow-up if enabled and not already scheduled
           if (bookmark.smartFollowUp.enabled && !bookmark.smartFollowUp.followUpScheduled) {
             const nextFollowUpDate = new Date();
             const delayMinutes = TESTING_MODE ? bookmark.smartFollowUp.daysDelay : bookmark.smartFollowUp.daysDelay * 1440;
             nextFollowUpDate.setMinutes(nextFollowUpDate.getMinutes() + delayMinutes);
             bookmark.smartFollowUp.followUpScheduled = nextFollowUpDate;
             bookmark.smartFollowUp.followUpSent = false;
+            console.log(`Next follow-up scheduled for ${nextFollowUpDate} for bookmark ${bookmark._id}`);
           }
+
+          // Schedule next repeat
           await scheduleNextReminder(bookmark);
           sentCount++;
+          console.log(`📬 Regular reminder sent to ${user.email} for ${bookmark.url}`);
         }
 
         // Send follow-up reminder if due
         if (isFollowUpDue) {
           await sendEmail({
             to: user.email,
-            subject: `🔔 Follow-up: You haven't opened this bookmark yet`,
+            subject: `🔔 Follow-up: ${bookmark.title || 'Your bookmark'}`,
             html: emailTemplate(user, bookmark, trackingLink, remindAgainLink, frontendUrl, true),
           });
 
@@ -330,10 +350,13 @@ export const processReminderController = async (req, res) => {
           bookmark.smartFollowUp.followUpSent = true;
           bookmark.smartFollowUp.followUpScheduled = null;
           sentCount++;
+          console.log(`🔔 Follow-up sent to ${user.email} for ${bookmark._id}`);
         }
 
-        await bookmark.save();
-        console.log(`📬 Reminder(s) sent to ${user.email} for ${bookmark.url}`);
+        // Save changes if either reminder was sent
+        if (isRegularDue || isFollowUpDue) {
+          await bookmark.save();
+        }
       } catch (error) {
         failedCount++;
         console.error(`error sending mail for bookmark ${bookmark.id}`, error.message);
