@@ -422,8 +422,8 @@ async function scheduleNextReminder(bookmark) {
     
     bookmark.remindAt = nextRemindAt;
     bookmark.reminded = false;
-    bookmark.smartFollowUp.followUpScheduled = null;
-    bookmark.smartFollowUp.followUpSent = false;
+    // bookmark.smartFollowUp.followUpScheduled = null;
+    // bookmark.smartFollowUp.followUpSent = false;
     console.log(`Next reminder scheduled for ${nextRemindAt} for bookmark ${bookmark._id}`);
   }
 }
